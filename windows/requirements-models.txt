@@ -2,3 +2,4 @@
 faster-whisper>=1.2,<2
 av>=14,<19
 rapidocr-onnxruntime==1.4.4
+Pillow>=10,<13

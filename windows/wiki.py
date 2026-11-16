@@ -17,6 +17,8 @@ from public_page import (DOUYIN_SHARE, aliases_for, download_media, find_url, id
                          resolve_page, share_title, work_key)
 from storage import CHINA, IMPORTANCE, MAX_PACKAGE, atomic_write, now, read_json, sha256, write_json
 from drawing import VERSION as DRAWING_VERSION, drawing_profile, profile_lines
+from documents import document_text
+from vision import VERSION as VISION_VERSION, review_image
 
 TOPIC = "wiki/topics/科研工具"
 START = "<!-- research-collector:begin -->"
@@ -62,6 +64,9 @@ def capture_title(item, page):
     title = page.get("title") or item["title"]
     if title:
         return title
+    documents = [file["name"] for file in item.get("attachments", []) if file["kind"] == "document"]
+    if documents and not item["text"].strip():
+        return documents[0]
     first_line = next(iter(item["text"].splitlines()), "")
     platform = platform_for(item["url"]) or "主动分享"
     shared_title = share_title(first_line, platform)
@@ -283,7 +288,7 @@ class Wiki:
         assets = {}
         for file in item["attachments"]:
             rel = self.asset(folder / (file["id"] + ".part"), file["sha256"], Path(file["name"]).suffix.lower())
-            assets[file["sha256"]] = {"path": rel, "kind": file["kind"], "origin": "用户分享"}
+            assets[file["sha256"]] = {"path": rel, "kind": file["kind"], "origin": "用户分享", "name": file["name"]}
         remaining = MAX_PACKAGE
         platform = platform_for(page.get("canonical", "")) or platform_for(item.get("url", ""))
         for candidate in page.get("media", []):
@@ -475,6 +480,8 @@ class Wiki:
         return list(dict.fromkeys(touched))
 
     def coverage(self, source):
+        if source["assets"] and all(a["kind"] == "document" for a in source["assets"].values()) and not any(c["url"] for c in source["captures"].values()):
+            return []  # A standalone paper has no social-post image count to verify.
         pages = [c["page"] for c in source["captures"].values()]
         image_count = sum(asset["kind"] == "image" and asset["origin"] == "公开分享页"
                           and not asset.get("preview") for asset in source["assets"].values())
@@ -516,15 +523,18 @@ class Wiki:
                     elif asset["kind"] == "image":
                         values = [["", line] for line in image_text(self.vault / asset["path"])]
                         write_json(cache, values)
+                    elif asset["kind"] == "document":
+                        values = list(document_text(self.vault / asset["path"]))
+                        write_json(cache, values)
                     else:
                         values = list(video_text(self.vault / asset["path"]))
                         write_json(cache, values)
                     for time, value in values:
-                        where = link(asset["path"], "视频 " + time if time else f"配图 {n}")
+                        where = link(asset["path"], ("文档 " + time) if asset["kind"] == "document" else ("视频 " + time if time else f"配图 {n}"))
                         rows.append({"text": value, "where": where})
                 except Exception as exc:
                     LOGGER.warning("附件提取待重试 %s %s", digest[:10], type(exc).__name__)
-                    errors.append(f"附件 {n} 待提取（{type(exc).__name__}）")
+                    errors.append(f"附件 {n} 待提取（{str(exc)[:160] if isinstance(exc, ValueError) else type(exc).__name__}）")
                 if asset["kind"] == "video":
                     thorough = source.get("importance") == "高"
                     profile = "dense" if thorough else "standard"
@@ -541,7 +551,38 @@ class Wiki:
                         errors.append(f"视频 {n} 画面待识别（{type(exc).__name__}）")
         return rows, errors
 
+    def analyze_images(self, source):
+        if not self.local_models or not drawing_profile(source, current_analysis(source).get("rows", [])):
+            return source
+        if source.get("visual_retry_after", "") > now().isoformat():
+            return source
+        updated = deepcopy(source)
+        reviews = updated.setdefault("visual_reviews", {})
+        changed = False
+        for digest, asset in source["assets"].items():
+            if asset["kind"] != "image":
+                continue
+            if reviews.get(digest, {}).get("status") == "reviewed" and reviews[digest].get("version") == VISION_VERSION:
+                continue
+            cache = self.state / "extract" / f"{digest}-vision-v{VISION_VERSION}.json"
+            try:
+                result = read_json(cache) if cache.exists() else review_image(self.vault / asset["path"])
+                write_json(cache, result)
+                reviews[digest] = {**result, "path": asset["path"]}
+            except Exception as exc:
+                reviews[digest] = {"status": "pending", "path": asset["path"], "error": type(exc).__name__}
+                LOGGER.warning("逐图视觉分析待重试 %s %s", digest[:10], type(exc).__name__)
+            changed = True
+        if changed:
+            updated["visual_retry_after"] = (now() + timedelta(hours=1)).isoformat()
+            updated.pop("drawing_version", None)
+            self.catalog[source["id"]] = updated
+            self.save()
+            return updated
+        return source
+
     def analyze(self, source):
+        source = self.analyze_images(source)
         analysis = current_analysis(source)
         if source.get("drawing_version") != DRAWING_VERSION:
             rows = analysis.get("rows") or self.evidence(source)[0]
@@ -636,8 +677,8 @@ class Wiki:
                 lines.append("- 用户确认本次补传包含完整正文和全部原始媒体")
             if limit := c["page"].get("limit"):
                 lines.append(f"- {plain(limit)}")
-        lines += ["", "## 已保存的图片和视频", ""]
-        lines.extend(f'- {link(asset["path"], asset["origin"] + (" · 图片" if asset["kind"] == "image" else " · 视频"))}'
+        lines += ["", "## 已保存的附件", ""]
+        lines.extend(f'- {link(asset["path"], asset["origin"] + " · " + {"image": "图片", "video": "视频", "document": "文档"}.get(asset["kind"], "附件"))}'
                      for asset in source["assets"].values())
         if not source["assets"]:
             lines.append("- 暂无可读取附件")

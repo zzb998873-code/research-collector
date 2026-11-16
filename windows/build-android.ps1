@@ -5,6 +5,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 $project = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $source = Join-Path $project 'android'
 $runtime = Join-Path $project '.runtime/android'

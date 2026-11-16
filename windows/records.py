@@ -27,10 +27,12 @@ def detail(wiki, inbox, capture_id):
     assets = list(source["assets"].values())
     image_count = sum(a["kind"] == "image" for a in assets)
     video_count = sum(a["kind"] == "video" for a in assets)
+    document_count = sum(a["kind"] == "document" for a in assets)
     if assets:
-        lines.append(f"图片 {image_count} 张 · 视频 {video_count} 个")
+        lines.append(f"图片 {image_count} 张 · 视频 {video_count} 个 · 文档 {document_count} 份")
+        lines.extend("文档  " + a.get("name", a["path"].rsplit("/", 1)[-1]) for a in assets if a["kind"] == "document")
     if not assets:
-        lines.append("暂无图片或视频")
+        lines.append("暂无附件")
     lines += ["", "待补资料", *(missing or ["原文与附件已齐全"]), "", "处理要点"]
     for point in analysis.get("points", []):
         lines.append(point["label"] + "  " + point["text"])
@@ -43,6 +45,14 @@ def detail(wiki, inbox, capture_id):
     drawing = source.get("drawing", {})
     if drawing:
         lines += ["", "绘图灵感", *drawing.get("display", [])]
+        for number, review in enumerate(drawing.get("visual_reviews", {}).values(), 1):
+            state = "已分析，待核对" if review.get("status") == "reviewed" else "待分析"
+            if review.get("verification") == "assistant_checked":
+                state = "已对照原图核对"
+            lines += ["", f"图片 {number} · {state}"]
+            lines.extend(f"{key}  {value}" for key, value in review.get("observations", {}).items())
+            if review.get("error"):
+                lines.append("待重试  " + review["error"])
     return {"id": capture_id, "source_id": source["id"], "title": source["title"],
             "url": capture["page"].get("canonical") or capture["url"],
             "category": source.get("user_category", source["category"]),

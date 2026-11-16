@@ -153,19 +153,34 @@ struct Index {
   }
 
   private async selectFiles(): Promise<void> {
+    if (this.files.length >= 64) { return; }
     try {
       const options: photoAccessHelper.PhotoSelectOptions = new photoAccessHelper.PhotoSelectOptions();
       options.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_VIDEO_TYPE;
-      options.maxSelectNumber = 64;
+      options.maxSelectNumber = 64 - this.files.length;
       const result: photoAccessHelper.PhotoSelectResult =
         await new photoAccessHelper.PhotoViewPicker().select(options);
       if (result.photoUris.length) {
-        this.files = result.photoUris.map((uri: string): SharedFile => {
+        this.files = this.files.concat(result.photoUris.map((uri: string): SharedFile => {
           return { uri: uri, name: uri.split('/').pop() ?? '' };
-        });
+        }));
       }
     } catch (error) {
       this.captureState = '无法读取图库 · ' + (error as Error).message;
+    }
+  }
+
+  private async selectDocuments(): Promise<void> {
+    try {
+      const options: picker.DocumentSelectOptions = new picker.DocumentSelectOptions();
+      options.maxSelectNumber = Math.max(1, 64 - this.files.length);
+      options.fileSuffixFilters = ['论文文件|.pdf,.doc,.docx'];
+      const uris: string[] = await new picker.DocumentViewPicker(this.context()).select(options);
+      this.files = this.files.concat(uris.map((uri: string): SharedFile => {
+        return { uri: uri, name: uri.split('/').pop() ?? '' };
+      }));
+    } catch (error) {
+      this.captureState = '无法读取文档 · ' + (error as Error).message;
     }
   }
 
@@ -552,6 +567,12 @@ struct Index {
               .border({ width: 2, color: BORDER }).shadow({ radius: 1, color: INK, offsetX: 2, offsetY: 4 })
               .enabled(!this.busy).stateStyles({ normal: this.raisedButton, pressed: this.pressedButton }).onClick(() => this.selectFiles())
           }
+          Button('上传 PDF / Word', { type: ButtonType.Normal })
+            .height(48).borderRadius(9).fontSize(14).backgroundColor(TINT).fontColor(NAVY)
+            .border({ width: 2, color: BORDER }).shadow({ radius: 1, color: INK, offsetX: 2, offsetY: 4 })
+            .enabled(!this.busy && this.files.length < 64)
+            .stateStyles({ normal: this.raisedButton, pressed: this.pressedButton })
+            .onClick(() => this.selectDocuments())
           if (this.files.length) {
             Row({ space: 8 }) {
               Text('已选 ' + this.files.length.toString() + ' 个附件').fontSize(14).fontColor(MUTED).layoutWeight(1)

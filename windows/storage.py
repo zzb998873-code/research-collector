@@ -17,6 +17,7 @@ CHINA = timezone(timedelta(hours=8))
 ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 DIGEST = re.compile(r"[0-9a-f]{64}")
 MEDIA_EXTENSIONS = {
+    ".pdf": "document", ".docx": "document", ".doc": "document",
     ".jpg": "image", ".jpeg": "image", ".png": "image", ".webp": "image",
     ".gif": "image", ".heic": "image", ".heif": "image", ".bmp": "image",
     ".mp4": "video", ".mov": "video", ".webm": "video", ".m4v": "video",

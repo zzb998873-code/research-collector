@@ -48,6 +48,31 @@ def sample(url, text="", data=None, name="palette.png", complete=False):
 
 
 class CollectorTest(unittest.TestCase):
+    def test_document_upload_preserves_file_and_extracts_without_video(self):
+        import io
+        from docx import Document
+        doc = Document()
+        doc.add_paragraph("Abrasion measurement method")
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        data = buffer.getvalue()
+        cap = sample("", "", data, "paper.docx")
+        cap.update(trigger="share", title="", category="学科进展")
+        cap["attachments"][0]["kind"] = "document"
+        self.assertEqual(self.begin(cap)[0], 200)
+        fid = cap["attachments"][0]["id"]
+        self.assertEqual(self.request("PUT", f'/v1/captures/{cap["id"]}/files/{fid}', data, offset=0)[0], 200)
+        self.assertEqual(self.commit(cap)[0], 200)
+        wiki = Wiki(self.vault, self.state, False, True)
+        with patch("wiki.video_text") as video, patch("wiki.summarize", return_value=("", [])):
+            process_pending(self.inbox, wiki)
+        source = next(iter(wiki.catalog.values()))
+        self.assertEqual(source["title"], "paper.docx")
+        self.assertEqual(wiki.coverage(source), [])
+        self.assertEqual(source["analysis"]["rows"][0]["text"], "Abrasion measurement method")
+        self.assertEqual((self.vault / next(iter(source["assets"].values()))["path"]).read_bytes(), data)
+        video.assert_not_called()
+
     def test_detail_lookup_parent_supplement_and_retry(self):
         original = sample("", "图型：环形层叠图\n线宽 1.5 pt\n色值 #123456", b"image")
         original["trigger"] = "share"

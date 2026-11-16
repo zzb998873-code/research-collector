@@ -141,6 +141,9 @@ function fileName(raw: string): string {
 }
 
 function kindFor(name: string): string {
+  if (/\.(?:pdf|docx?)$/i.test(name)) {
+    return 'document';
+  }
   if (/\.(?:jpe?g|png|webp|gif|heic|heif|bmp)$/i.test(name)) {
     return 'image';
   }
@@ -252,7 +255,7 @@ export async function addCapture(root: string, trigger: string, title: string, t
       const name: string = fileName(item.name);
       const kind: string = kindFor(name);
       if (!kind || !item.uri.startsWith('file://')) {
-        throw new Error('分享来源未提供可读取的图片或视频文件');
+        throw new Error('分享来源未提供可读取的图片、视频或 PDF / Word 文件');
       }
       const id: string = util.generateRandomUUID().toLowerCase();
       const dest: string = folder + '/' + id + '.media';

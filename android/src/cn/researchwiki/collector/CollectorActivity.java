@@ -56,7 +56,7 @@ public final class CollectorActivity extends Activity {
     private EditText draft, custom, drawingNotes;
     private LinearLayout captureCard, records;
     private TextView linkStatus, attachmentStatus, pairingState, queueState, syncState, feedback;
-    private Button confirm, pair, sync, clearFiles, addMedia, paste, viewRecords;
+    private Button confirm, pair, sync, clearFiles, addMedia, addDocument, paste, viewRecords;
     private ScrollView scroll;
     private CheckBox complete;
     private String category = "", importance = "中", sharedTitle = "", lastClipboard = "";
@@ -315,6 +315,8 @@ public final class CollectorActivity extends Activity {
         addMedia = button("添加图片或视频", this::chooseMedia);
         weighted(actions, addMedia, 8);
         append(card, actions, 8);
+        addDocument = button("上传 PDF / Word", this::chooseDocuments);
+        append(card, addDocument, 8);
 
         LinearLayout attachments = row();
         attachmentStatus = label("", 14, MUTED, false);
@@ -421,6 +423,7 @@ public final class CollectorActivity extends Activity {
         if (!busy && !parentId.isEmpty()) confirm.setText("确认补充原记录");
         pair.setEnabled(!busy);
         addMedia.setEnabled(!busy);
+        addDocument.setEnabled(!busy);
         paste.setEnabled(!busy);
         clearFiles.setEnabled(!busy);
     }
@@ -760,6 +763,14 @@ public final class CollectorActivity extends Activity {
         Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*");
         picker.addCategory(Intent.CATEGORY_OPENABLE);
         startActivityForResult(picker, PICK_PAIRING);
+    }
+
+    private void chooseDocuments() {
+        Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*");
+        picker.addCategory(Intent.CATEGORY_OPENABLE);
+        picker.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
+        picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        startActivityForResult(picker, PICK_MEDIA);
     }
 
     private void chooseMedia() {

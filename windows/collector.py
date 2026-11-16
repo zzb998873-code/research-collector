@@ -298,6 +298,7 @@ def process_pending(inbox, wiki, extract=True):
                     source = wiki.catalog[source_id]
                     source["analysis"] = {**source.get("analysis", {}), "done": False, "retry_after": ""}
                     source.pop("drawing_version", None)
+                    source.pop("visual_retry_after", None)
                     wiki.save()
             else:
                 inbox.processing = folder.name

@@ -1,8 +1,9 @@
 """Evidence-linked drawing vocabulary and parameter records. Unknowns stay explicit."""
 
 import re
+from vision import coverage
 
-VERSION = 1
+VERSION = 2
 TYPES = {
     "技术路线图": ("技术路线图", "研究路线图"),
     "流程图": ("流程图", "flowchart"),
@@ -75,7 +76,11 @@ def drawing_profile(source, rows):
         assets.append({"path": asset["path"], "kind": asset["kind"], "types": mentions,
                        "type_status": ("该素材文字提及 " + "、".join(mentions) + "，图像结构待核对")
                        if mentions else "图型待识别，待核对实际图像"})
-    return {"version": VERSION, "types": types, "new_types": [name for name in types if name not in TYPES], "parameters": parameters,
+    visual = coverage(source)
+    display.insert(0, f'逐图视觉分析 {visual["reviewed"]}/{visual["total"]} 张（自动分析需复核；仅统计本地已保存图片）')
+    if not visual["total"]:
+        display.insert(1, "无可分析图片；视频文字识别不计作逐图视觉分析")
+    return {"version": VERSION, "visual_coverage": visual, "visual_reviews": source.get("visual_reviews", {}), "types": types, "new_types": [name for name in types if name not in TYPES], "parameters": parameters,
             "assets": assets, "display": display}
 
 
@@ -83,7 +88,16 @@ def profile_lines(profile, link, plain):
     if not profile:
         return []
     lines = ["", "## 绘图灵感与复用参数", "",
-             "图型按原文、OCR 或视频文字登记。实际图像结构尚待核对，未提供的参数保持待补。", ""]
+             "文字证据与逐图视觉分析分别记录；模型观察需人工复核，复现建议不是作者原始步骤。", "",
+             *profile.get("display", [])[:1], ""]
+    for digest, review in profile.get("visual_reviews", {}).items():
+        lines += ["", "### 逐图分析 " + link(review["path"]), ""]
+        if review.get("status") == "reviewed":
+            lines.append("- 模型：" + plain(review.get("model", "")))
+            lines.append("- 复核：" + ("已由助手对照原图核对" if review.get("verification") == "assistant_checked" else "自动视觉分析，待人工核对"))
+            lines.extend(f'- **{plain(key)}**：{plain(value)}' for key, value in review["observations"].items())
+        else:
+            lines.append("- 待分析：" + plain(review.get("error", "尚未完成")))
     if not profile["types"]:
         lines.append("- 图型待识别")
     for name, citations in profile["types"].items():

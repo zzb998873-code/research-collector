@@ -289,7 +289,8 @@ final class CollectorStore {
             ext = inferred == null ? "" : inferred;
         }
         boolean image = ext.matches("jpg|jpeg|png|webp|gif|heic|heif|bmp");
-        if (!image && !ext.matches("mp4|mov|webm|m4v")) {
+        boolean document = ext.matches("pdf|doc|docx");
+        if (!image && !document && !ext.matches("mp4|mov|webm|m4v")) {
             throw new IOException("附件类型暂不支持");
         }
         String id = UUID.randomUUID().toString();
@@ -326,7 +327,7 @@ final class CollectorStore {
         if (name.length() > 150) {
             name = name.substring(name.length() - 150);
         }
-        return new JSONObject().put("id", id).put("name", name).put("kind", image ? "image" : "video")
+        return new JSONObject().put("id", id).put("name", name).put("kind", image ? "image" : document ? "document" : "video")
                 .put("sha256", hash.toString()).put("size", size);
     }
 
